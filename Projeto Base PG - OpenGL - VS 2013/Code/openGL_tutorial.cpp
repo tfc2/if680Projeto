@@ -14,11 +14,12 @@
 #include <cmath>
 
 #define KEY_ESCAPE 27
+#define PI 3.14159265
 
 using namespace std;
 
 GLfloat angle, fAspect;
-int luz = -1, objeto = 0;
+int luz = -1, objeto = 0, h = 0;
 
 
 /************************************************************************
@@ -161,18 +162,6 @@ void findplane(GLdouble plane_eq[4],
 	plane_eq[3] = -(plane_eq[0] * p0[0]
 		+ plane_eq[1] * p0[1]
 		+ plane_eq[2] * p0[2]);
-}
-
-
-void drawplane()
-{
-	glColor3d(0.2, 0.2, 0.8);
-	glBegin(GL_POLYGON);
-	glVertex3dv(planepts[0]);
-	glVertex3dv(planepts[1]);
-	glVertex3dv(planepts[2]);
-	glVertex3dv(planepts[3]);
-	glEnd();
 }
 
 Model_OBJ::Model_OBJ()
@@ -438,17 +427,76 @@ void Model_OBJ::Draw()
 ***************************************************************************/
 
 Model_OBJ obj0, obj1, obj2;
-float g_rot_x, g_rot_y, g_rot_z, g_rotation_x, g_rotation_y, g_rotation_z, g_translation_x, g_translation_y, g_translation_z, g_scale = 1, posicao_luz_x = -5, posicao_luz_y, posicao_luz_z;
+float g_rot_x, g_rot_y, g_rot_z, g_rotation_x, g_rotation_y, g_rotation_z, g_translation_x, g_translation_y, g_translation_z = -20, g_scale = 1, posicao_luz_x = -5, posicao_luz_y, posicao_luz_z;
 
 GLfloat cameraXpos = 0, cameraYpos = 0, cameraZpos = 0;
-GLfloat cameraXrot = 0, cameraYrot = 0;
+GLfloat cameraXang = 0, cameraYang = 270;
+GLfloat red = 1.0, green = 1.0, blue = 1.0;
+bool p = 0; // 0 = pinta uma face, 1 = pinta todo o objeto
+
+GLfloat objectXpos = 0, objectYpos = 0, objectZpos = -200;
+GLfloat objectXang = 0, objectYang = 0, objectZang = 0;
+
+GLfloat cameraMatrix[16] = { 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0 };
+
+double Screenw = 400, Screenh = 400;
 
 glutWindow win;
+
+void translateMatrix(GLfloat m[16], GLfloat tX, GLfloat tY, GLfloat tZ){
+	m[0] = m[0] + m[12] * tX;
+	m[1] = m[1] + m[13] * tX;
+	m[2] = m[2] + m[14] * tX;
+	m[3] = m[3] + m[15] * tX;
+
+	m[4] = m[4] + m[12] * tY;
+	m[5] = m[5] + m[13] * tY;
+	m[6] = m[6] + m[14] * tY;
+	m[7] = m[7] + m[15] * tY;
+
+	m[8] = m[8] + m[12] * tZ;
+	m[9] = m[9] + m[13] * tZ;
+	m[10] = m[10] + m[14] * tZ;
+	m[11] = m[11] + m[15] * tZ;
+
+
+}
+
+void xRotateMatrix(GLfloat m[16], GLfloat angle){
+	GLfloat cosAngle = cos(angle*PI / 180.0);
+	GLfloat sinAngle = sin(angle*PI / 180.0);
+
+	m[4] = cosAngle*m[4] - sinAngle*m[8];
+	m[5] = cosAngle*m[5] - sinAngle*m[9];
+	m[6] = cosAngle*m[6] - sinAngle*m[10];
+	m[7] = cosAngle*m[7] - sinAngle*m[11];
+	m[8] = sinAngle*m[4] + cosAngle*m[8];
+	m[9] = sinAngle*m[5] + cosAngle*m[9];
+	m[10] = sinAngle*m[6] + cosAngle*m[10];
+	m[11] = sinAngle*m[7] + cosAngle*m[11];
+}
+
+void yRotateMatrix(GLfloat m[16], GLfloat angle){
+	GLfloat cosAngle = cos(angle*PI / 180.0);
+	GLfloat sinAngle = sin(angle*PI / 180.0);
+
+	m[0] = cosAngle*m[0] + sinAngle*m[8];
+	m[1] = cosAngle*m[1] + sinAngle*m[9];
+	m[2] = cosAngle*m[2] + sinAngle*m[10];
+	m[3] = cosAngle*m[3] + sinAngle*m[11];
+	m[8] = -sinAngle*m[0] + cosAngle*m[8];
+	m[9] = -sinAngle*m[1] + cosAngle*m[9];
+	m[10] = -sinAngle*m[2] + cosAngle*m[10];
+	m[11] = -sinAngle*m[3] + cosAngle*m[11];
+}
+
+
+
 
 void display()
 {
 
-	glColor3f(0.8, 0.8, 0.8);
+	glColor3f(red, green, blue);
 	GLfloat luzAmbiente0[4] = { 1.0, 1.0, 1.0, 1.0 }; // luz branca
 	GLfloat luzAmbiente1[4] = { 1.0, 0.0, 0.0, 1.0 }; // luz vermelha
 	GLfloat luzAmbiente2[4] = { 1.0, 0.0, 1.0, 1.0 }; // luz rosa
@@ -459,7 +507,7 @@ void display()
 	GLfloat luzAmbiente7[4] = { 0.6, 0.0, 1.0, 1.0 }; // luz roxo
 
 	GLfloat luzDifusa[4] = { 0.7, 0.7, 0.7, 1.0 };
-	GLfloat luzEspecular[4] = { 0.4, 0.4, 0.4, 1.0 };
+	GLfloat luzEspecular[4] = { 1.0, 1.0, 1.0, 1.0 };
 
 	GLfloat posicaoLuz0[4] = { posicao_luz_x, posicao_luz_y, posicao_luz_z, 1.0 };
 	GLfloat posicaoLuz1[4] = { posicao_luz_x, posicao_luz_y, posicao_luz_z, 1.0 };
@@ -481,71 +529,54 @@ void display()
 	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, luzAmbiente6);
 	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, luzAmbiente7);
 
-	// Define os parâmetros da luz de número 0 - branca
 	glLightfv(GL_LIGHT0, GL_AMBIENT, luzAmbiente0);
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT0, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT0, GL_POSITION, posicaoLuz0);
 
-	// Define os parâmetros da luz de número 1 - vermelha
 	glLightfv(GL_LIGHT1, GL_AMBIENT, luzAmbiente1);
 	glLightfv(GL_LIGHT1, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT1, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT1, GL_POSITION, posicaoLuz1);
 
-	// Define os parâmetros da luz de número 0 - branca
 	glLightfv(GL_LIGHT2, GL_AMBIENT, luzAmbiente2);
 	glLightfv(GL_LIGHT2, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT2, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT2, GL_POSITION, posicaoLuz2);
 
-	// Define os parâmetros da luz de número 1 - vermelha
 	glLightfv(GL_LIGHT3, GL_AMBIENT, luzAmbiente3);
 	glLightfv(GL_LIGHT3, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT3, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT3, GL_POSITION, posicaoLuz3);
 
-	// Define os parâmetros da luz de número 0 - branca
 	glLightfv(GL_LIGHT4, GL_AMBIENT, luzAmbiente4);
 	glLightfv(GL_LIGHT4, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT4, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT4, GL_POSITION, posicaoLuz4);
 
-	// Define os parâmetros da luz de número 1 - vermelha
 	glLightfv(GL_LIGHT5, GL_AMBIENT, luzAmbiente5);
 	glLightfv(GL_LIGHT5, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT5, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT5, GL_POSITION, posicaoLuz5);
 
-	// Define os parâmetros da luz de número 0 - branca
 	glLightfv(GL_LIGHT6, GL_AMBIENT, luzAmbiente6);
 	glLightfv(GL_LIGHT6, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT6, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT6, GL_POSITION, posicaoLuz6);
 
-	// Define os parâmetros da luz de número 1 - vermelha
 	glLightfv(GL_LIGHT7, GL_AMBIENT, luzAmbiente7);
 	glLightfv(GL_LIGHT7, GL_DIFFUSE, luzDifusa);
 	glLightfv(GL_LIGHT7, GL_SPECULAR, luzEspecular);
 	glLightfv(GL_LIGHT7, GL_POSITION, posicaoLuz7);
 
 	glLoadIdentity();
-	gluLookAt(0, 20, 30, 0, 0, 0, 0, 1, 0);
-	
-	glViewport(0, 0, win.width, win.height);
-	glScissor(0, 0, win.width, win.height);
-	glEnable(GL_SCISSOR_TEST);
 
+	glViewport(win.width / 2, 0, win.width / 2, win.height);
+	glScissor(win.width / 2, 0, win.width / 2, win.height);
+	glEnable(GL_SCISSOR_TEST);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
 	glPushMatrix();
-
-	//operacoes de camera
-	glRotatef(cameraYrot, 0, 1.0f, 0);
-	glRotatef(cameraXrot, 1.0f, 0, 0);
-
-	glTranslatef(-cameraXpos, -cameraYpos, -cameraZpos);
 
 	glRotatef(g_rot_x, 1, 0, 0);
 	glRotatef(g_rot_y, 0, 1, 0);
@@ -555,6 +586,9 @@ void display()
 
 	// Ativa o uso da luz ambiente 
 	if (luz == 0){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente0);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glEnable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -565,6 +599,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 1){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente1);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glEnable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -575,6 +612,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 2){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente2);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glEnable(GL_LIGHT2);
@@ -585,6 +625,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 3){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente3);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -595,6 +638,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 4){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente4);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -605,6 +651,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 5){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente5);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -615,6 +664,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 6){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente6);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -625,6 +677,9 @@ void display()
 		glDisable(GL_LIGHT7);
 	}
 	else if (luz == 7){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente7);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHT1);
 		glDisable(GL_LIGHT2);
@@ -635,15 +690,443 @@ void display()
 		glEnable(GL_LIGHT7);
 	}
 	else {
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+		glDisable(GL_LIGHTING);
+	}
+
+	GLfloat diff[] = { red, green, blue };
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, diff);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+	if (objeto == 0){
+		obj0.Draw();
+	}
+	else if (objeto == 1) {
+		obj1.Draw();
+	}
+	else {
+		obj2.Draw();
+	}
+
+	
+	glPushMatrix();
+	glColor3f(1.0, 0.0, 0.0);
+	glTranslatef(5.0, -2.0, 20.0);
+	glutSolidCube(5);
+	glTranslatef(-10.0, -2.0, -50.0);
+	glColor3f(0.0, 1.0, 0.0);
+	glutSolidCube(5);
+	glPopMatrix();
+	
+	glPopMatrix();
+
+	glPushMatrix();
+	//operacoes de camera
+	glTranslatef(cameraXpos, cameraYpos, cameraZpos);
+
+	glRotatef(-cameraXang, 1.0f, 0, 0);
+	glRotatef(-cameraYang, 0, 1.0f, 0);
+
+	glPushMatrix();
+	//draw camera
+	//glTranslated(0, 0, 30);
+
+	glRotatef(270, 0, 1.0f, 0);
+
+	glColor3f(1.0f, 0.0f, 1.0f);
+	glutSolidCube(2.0f);
+
+	glTranslated(0, 0, -1);
+	glColor3f(0.0f, 0.0f, 1.0f);
+	glutSolidCube(1.0f);
+	glTranslated(0, 0, 1);
+
+	glPopMatrix();
+
+	glPopMatrix();
+
+	// ------------------------- Início desenho paleta de cores -------------------------
+
+	// Elemento (1,1) da matriz de cores
+
+	glViewport(win.width - 100.0, 0, 25.0, 25.0);
+	glScissor(win.width - 100.0, 0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(1.0f, 1.0f, 1.0f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (1,2) da matriz de cores
+
+	glViewport(win.width - 75.0, 0, 25.0, 25.0);
+	glScissor(win.width - 75.0, 0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.68f, 0.68f, 0.68f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (1,3) da matriz de cores
+
+	glViewport(win.width - 50.0, 0, 25.0, 25.0);
+	glScissor(win.width - 50.0, 0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.45f, 0.45f, 0.45f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (1,4) da matriz de cores
+
+	glViewport(win.width - 25.0, 0, 25.0, 25.0);
+	glScissor(win.width - 25.0, 0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.05f, 0.05f, 0.05f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (2,1) da matriz de cores
+
+	glViewport(win.width - 100.0, 25.0, 25.0, 25.0);
+	glScissor(win.width - 100.0, 25.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.78f, 0.88f, 0.71f, 0.5f); // alterar aqui para mudar cor quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (2,2) da matriz de cores
+
+	glViewport(win.width - 75.0, 25.0, 25.0, 25.0);
+	glScissor(win.width - 75.0, 25.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.66f, 0.81f, 0.56f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (2,3) da matriz de cores
+
+	glViewport(win.width - 50.0, 25.0, 25.0, 25.0);
+	glScissor(win.width - 50.0, 25.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.1f, 0.68f, 0.32f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (2,4) da matriz de cores
+
+	glViewport(win.width - 25.0, 25.0, 25.0, 25.0);
+	glScissor(win.width - 25.0, 25.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.33f, 0.5f, 0.22f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (3,1) da matriz de cores
+
+	glViewport(win.width - 100.0, 50.0, 25.0, 25.0);
+	glScissor(win.width - 100.0, 50.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.74f, 0.84f, 0.93f, 0.5f); // alterar aqui para mudar cor quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (3,2) da matriz de cores
+
+	glViewport(win.width - 75.0, 50.0, 25.0, 25.0);
+	glScissor(win.width - 75.0, 50.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.56f, 0.67f, 0.85f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (3,3) da matriz de cores
+
+	glViewport(win.width - 50.0, 50.0, 25.0, 25.0);
+	glScissor(win.width - 50.0, 50.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.19f, 0.46f, 0.7f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (3,4) da matriz de cores
+
+	glViewport(win.width - 25.0, 50.0, 25.0, 25.0);
+	glScissor(win.width - 25.0, 50.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.19f, 0.34f, 0.58f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (4,1) da matriz de cores
+
+	glViewport(win.width - 100.0, 75.0, 25.0, 25.0);
+	glScissor(win.width - 100.0, 75.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(1.0f, 1.0f, 0.21f, 0.0f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (4,2) da matriz de cores
+
+	glViewport(win.width - 75.0, 75.0, 25.0, 25.0);
+	glScissor(win.width - 75.0, 75.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(1.0f, 0.75f, 0.17f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (4,3) da matriz de cores
+
+	glViewport(win.width - 50.0, 75.0, 25.0, 25.0);
+	glScissor(win.width - 50.0, 75.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(1.0f, 0.05f, 0.1f, 0.5f); // alterar aqui para mudar a cor do quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+	// Elemento (4,4) da matriz de cores
+
+	glViewport(win.width - 25.0, 75.0, 25.0, 25.0);
+	glScissor(win.width - 25.0, 75.0, 25.0, 25.0);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(0.74f, 0.02f, 0.06f, 0.5f); // alterar aqui para mudar cor quadrado
+
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+
+	glColor3f(1.0, 1.0, 0.0);
+
+
+	//------------------------------------------------------------------------------------
+
+	glViewport(0, 0, win.width / 2, win.height);
+	glScissor(0, 0, win.width / 2, win.height);
+	glEnable(GL_SCISSOR_TEST);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	gluPerspective(angle, fAspect, 0.4, 1000);
+
+	glMatrixMode(GL_MODELVIEW);
+
+	glColor3f(red, green, blue);
+
+	glPushMatrix();
+
+	GLfloat temp[16];
+
+	temp[0] = cameraMatrix[0];
+	temp[1] = cameraMatrix[4];
+	temp[2] = cameraMatrix[8];
+	temp[3] = cameraMatrix[12];
+	temp[4] = cameraMatrix[1];
+	temp[5] = cameraMatrix[5];
+	temp[6] = cameraMatrix[9];
+	temp[7] = cameraMatrix[13];
+	temp[8] = cameraMatrix[2];
+	temp[9] = cameraMatrix[6];
+	temp[10] = cameraMatrix[10];
+	temp[11] = cameraMatrix[14];
+	temp[12] = cameraMatrix[3];
+	temp[13] = cameraMatrix[7];
+	temp[14] = cameraMatrix[11];
+	temp[15] = cameraMatrix[15];
+
+	glLoadIdentity();
+	glLoadMatrixf(temp);
+
+	glRotatef(g_rot_x, 1, 0, 0);
+	glRotatef(g_rot_y, 0, 1, 0);
+	glRotatef(g_rot_z, 0, 0, 1);
+	glTranslatef(g_translation_x, g_translation_y, g_translation_z);
+	glScalef(g_scale, g_scale, g_scale);
+
+	// Ativa o uso da luz ambiente 
+	if (luz == 0){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente0);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
 		glEnable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 1){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente1);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
 		glEnable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 2){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente2);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
 		glEnable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 3){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente3);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
 		glEnable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 4){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente4);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
 		glEnable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 5){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente5);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
 		glEnable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 6){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente6);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
 		glEnable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+	}
+	else if (luz == 7){
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, luzAmbiente7);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, luzDifusa);
+		glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, luzEspecular);
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
 		glEnable(GL_LIGHT7);
 	}
+	else {
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHT2);
+		glDisable(GL_LIGHT3);
+		glDisable(GL_LIGHT4);
+		glDisable(GL_LIGHT5);
+		glDisable(GL_LIGHT6);
+		glDisable(GL_LIGHT7);
+		glDisable(GL_LIGHTING);
+	}
+
 
 	if (objeto == 0){
 		obj0.Draw();
@@ -655,79 +1138,61 @@ void display()
 		obj2.Draw();
 	}
 
-	glPopMatrix();
-
-	glDisable(GL_LIGHTING);
-
-	// Draw the plane
+	
 	glPushMatrix();
-	glTranslated(0., 0., -4.);
-	drawplane();
-	glPopMatrix();
-
-
-	// Elemento (3,3) da matriz de cores
-
-	glViewport(win.width - 50.0, 25.0, 25.0, 25.0);
-	glScissor(win.width - 50.0, 25.0, 25.0, 25.0);
-	glEnable(GL_SCISSOR_TEST);
-	glClearColor(0.5f, 0.5f, 0.0f, 0.5f);
-
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
-
-	glColor3f(1.0, 1.0, 0.0);
-
-	// Elemento (3,4) da matriz de cores
-
-	glViewport(win.width - 25.0, 25.0, 25.0, 25.0);
-	glScissor(win.width - 25.0, 25.0, 25.0, 25.0);
-	glEnable(GL_SCISSOR_TEST);
-	glClearColor(0.5f, 0.0f, 0.5f, 0.5f);
-
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
-
-	glColor3f(1.0, 1.0, 0.0);
-
-	// Elemento (3,4) da matriz de cores
-
-	glViewport(win.width - 50.0, 0, 25.0, 25.0);
-	glScissor(win.width - 50.0, 0, 25.0, 25.0);
-	glEnable(GL_SCISSOR_TEST);
-	glClearColor(0.0f, 0.5f, 0.5f, 0.5f);
-
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
-
-	glColor3f(1.0, 1.0, 0.0);
-
-	// Elemento (4,4) da matriz de cores
-
-	glViewport(win.width - 25.0, 0, 25.0, 25.0);
-	glScissor(win.width - 25.0, 0, 25.0, 25.0);
-	glEnable(GL_SCISSOR_TEST);
-	glClearColor(0.0f, 1.1f, 0.0f, 0.5f);
-
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
-
-	glColor3f(1.0, 1.0, 0.0);
-
-	glPopMatrix();
-
+	glColor3f(1.0, 0.0, 0.0);
+	glTranslatef(5.0, -2.0, 20.0);
+	glutSolidCube(5);
+	glTranslatef(-10.0, -2.0, -50.0);
+	glColor3f(0.0, 1.0, 0.0);
+	glutSolidCube(5);
 	glPopMatrix();
 	
 
+	glPopMatrix();
 
 	glutSwapBuffers();
 
 }
 
+
+// Função usada para especificar o volume de visualização
+void EspecificaParametrosVisualizacao(void)
+{
+	// Especifica sistema de coordenadas de projeção
+	glMatrixMode(GL_PROJECTION);
+
+	// Inicializa sistema de coordenadas de projeção
+	glLoadIdentity();
+
+	// Especifica a projeção perspectiva
+	gluPerspective(angle, fAspect, 0.4, 1000);
+
+	// Especifica sistema de coordenadas do modelo
+	glMatrixMode(GL_MODELVIEW);
+
+	// Inicializa sistema de coordenadas do modelo
+	glLoadIdentity();
+
+}
+
+void reshape(int w, int h)
+{
+
+	// Para previnir uma divisão por zero
+	if (h == 0) h = 1;
+
+	win.height = h;
+	win.width = w;
+
+	// Calcula a correção de aspecto
+	fAspect = (GLfloat)w / (GLfloat)h;
+
+	// Especifica o tamanho da viewport
+
+	EspecificaParametrosVisualizacao();
+
+}
 
 void initialize()
 {
@@ -738,6 +1203,7 @@ void initialize()
 	gluPerspective(win.field_of_view_angle, aspect, win.z_near, win.z_far);
 	glMatrixMode(GL_MODELVIEW);
 	glShadeModel(GL_SMOOTH);
+	glEnable(GL_NORMALIZE);
 	glClearColor(0.0f, 0.1f, 0.0f, 0.5f);
 	glClearDepth(1.0f);
 	glEnable(GL_DEPTH_TEST);
@@ -775,6 +1241,7 @@ void initialize()
 
 void handleKeypress(unsigned char key, int x, int y)
 {
+	GLfloat cs, cx, cy, cz;
 
 	switch (key){
 
@@ -925,35 +1392,50 @@ void handleKeypress(unsigned char key, int x, int y)
 		// move para frente de acordo com o vetor diretor (eixo Z em coordenadas de câmera)
 	case 119: // tecla w ou
 	case 87: // tecla W
-		cameraZpos -= 10;
+		cs = 0.5 * cos(cameraXang*PI / 180.0);
+		cx = cs * cos(cameraYang*PI / 180.0);
+		cy = 0.5 * sin(cameraXang*PI / 180.0);
+		cz = cs * sin(cameraYang*PI / 180.0);
+
+		cameraXpos += cx;
+		cameraYpos += cy;
+		cameraZpos += cz;
+
+		translateMatrix(cameraMatrix, 0, 0, 0.5);
 		break;
 
 		// move para trás de acordo com o vetor diretor (eixo Z em coordenadas de câmera)
 	case 115: // tecla s ou
 	case 83: // tecla S
-		cameraZpos += 10;
+		cs = 0.5 * cos(cameraXang*PI / 180.0);
+		cx = cs * cos(cameraYang*PI / 180.0);
+		cy = 0.5 * sin(cameraXang*PI / 180.0);
+		cz = cs * sin(cameraYang*PI / 180.0);
+
+		cameraXpos -= cx;
+		cameraYpos -= cy;
+		cameraZpos -= cz;
+
+		translateMatrix(cameraMatrix, 0, 0, -0.5);
 		break;
 
 		// move para a esquerda de acordo com o vetor lateral (eixo X em coordenadas de câmera)
 	case 97: // tecla a ou
 	case 65: // tecla A
-		cameraXpos -= 10;
+		cameraXpos -= 0.3;
+		translateMatrix(cameraMatrix, 0.3, 0, 0);
 		break;
 
 		// move para a direita de acordo com o vetor lateral (eixo X em coordenadas de câmera)
 	case 100: // tecla d ou
 	case 68: // tecla D
-		cameraXpos += 10;
+		cameraXpos += 0.3;
+		translateMatrix(cameraMatrix, -0.3, 0, 0);
 		break;
 
-		/*
-		Falta fazer: botão esquerdo do mouse pressionado seguido de movimento do mouse: usar o delta de movimento
-		(diferença entre X e Y antigos e atuais do ponteiro) para rotacionar o vetor diretor da câmera para
-		esquerda / direita de acordo com o delta X e cima / baixo de acordo com o delta Y.A rotação lateral deve
-		considerar o eixo Y do mundo virtual, enquanto a rotação vertical deve considerar o eixo lateral X da
-		câmera.Dica : para aplicar rotação em torno de um eixo arbitrário w usar a matriz de rotação de
-		Rodrigues(http ://mathworld.wolfram.com/RodriguesRotationFormula.html):
-		*/
+	case 70: // p
+		p = !p;
+		break;
 
 	case 27: // ESC
 		exit(0);
@@ -973,8 +1455,11 @@ GLfloat currentY = 0;
 void handleMouseMove(int x, int y){
 	if (dragging){
 
-		//cameraYrot += (x - currentX);
-		//cameraXrot += (currentY - y);
+		cameraYang += (x - currentX);
+		cameraXang += (y - currentY);
+
+		yRotateMatrix(cameraMatrix, (x - currentX));
+		xRotateMatrix(cameraMatrix, (y - currentY));
 
 		currentX = x;
 		currentY = y;
@@ -996,12 +1481,193 @@ void handleMouseClick(int button, int state, int x, int y)
 
 	if (button == GLUT_LEFT_BUTTON)
 	if (state == GLUT_UP){
+
+		if ((x > win.width - 100) && (x < win.width - 75)){
+			if ((y < win.height) && (y > win.height - 25)){ // (1,1)
+				red = 1.0;
+				green = 1.0;
+				blue = 1.0;
+			}
+
+			if ((y < win.height - 25) && (y > win.height - 50)){ // (2,1)
+
+				red = 0.78;
+				green = 0.88;
+				blue = 0.71;
+			}
+
+			if ((y < win.height - 50) && (y > win.height - 75)){ // ((3,1)
+				red = 0.74;
+				green = 0.84;
+				blue = 0.93;
+			}
+
+			if ((y < win.height - 75) && (y > win.height - 100)){ // (4,1)
+				red = 1.00;
+				green = 1.0;
+				blue = 0.21;
+			}
+
+		}
+
+		if ((x > win.width - 75) && (x < win.width - 50)){
+
+			if ((y < win.height) && (y > win.height - 25)){ // (1,2)
+				red = 0.68;
+				green = 0.68;
+				blue = 0.68;
+			}
+
+			if ((y < win.height - 25) && (y > win.height - 50)){ // (2,2)
+				red = 0.66;
+				green = 0.81;
+				blue = 0.56;
+			}
+
+			if ((y < win.height - 50) && (y > win.height - 75)){ // ((3,2)
+				red = 0.56;
+				green = 0.67;
+				blue = 0.85;
+			}
+
+			if ((y < win.height - 75) && (y > win.height - 100)){ // (4,2)
+				red = 1.00;
+				green = 0.75;
+				blue = 0.17;
+			}
+
+		}
+
+
+		if ((x > win.width - 50) && (x < win.width - 25)){
+
+			if ((y < win.height) && (y > win.height - 25)){ // (1,3)
+				red = 0.45;
+				green = 0.45;
+				blue = 0.45;
+			}
+
+			if ((y < win.height - 25) && (y > win.height - 50)){ // (2,3)
+				red = 0.1;
+				green = 0.68;
+				blue = 0.32;
+			}
+
+			if ((y < win.height - 50) && (y > win.height - 75)){ // ((3,3)
+				red = 0.19;
+				green = 0.46;
+				blue = 0.7;
+			}
+
+			if ((y < win.height - 75) && (y > win.height - 100)){ // (4,3)
+				red = 1.00;
+				green = 0.05;
+				blue = 0.1;
+			}
+
+		}
+
+
+		if ((x > win.width - 25) && (x < win.width)){
+
+			if ((y < win.height) && (y > win.height - 25)){ // (1,4)
+				red = 0.05;
+				green = 0.05;
+				blue = 0.05;
+			}
+
+			if ((y < win.height - 25) && (y > win.height - 50)){ // (2,4)
+				red = 0.33;
+				green = 0.5;
+				blue = 0.22;
+			}
+
+			if ((y < win.height - 50) && (y > win.height - 75)){ // ((3,4)
+				red = 0.19;
+				green = 0.34;
+				blue = 0.58;
+			}
+
+			if ((y < win.height - 75) && (y > win.height - 100)){ // (4,4)
+				red = 0.74;
+				green = 0.02;
+				blue = 0.06;
+			}
+
+		}
+
 		dragging = 0;
+
 	}
 
 	glutPostRedisplay();  // avisa que a janela atual deve ser reimpressa
+
 }
 
+struct CVector3
+{
+public:
+
+	// A default constructor
+	CVector3() {}
+
+	// This is our constructor that allows us to initialize our data upon creating an instance
+	CVector3(float X, float Y, float Z)
+	{
+		x = X; y = Y; z = Z;
+	}
+
+	// Here we overload the + operator so we can add vectors together 
+	CVector3 operator+(CVector3 vVector)
+	{
+		// Return the added vectors result.
+		return CVector3(vVector.x + x, vVector.y + y, vVector.z + z);
+	}
+
+	// Here we overload the - operator so we can subtract vectors 
+	CVector3 operator-(CVector3 vVector)
+	{
+		// Return the subtracted vectors result
+		return CVector3(x - vVector.x, y - vVector.y, z - vVector.z);
+	}
+
+	// Here we overload the * operator so we can multiply by scalars
+	CVector3 operator*(float num)
+	{
+		// Return the scaled vector
+		return CVector3(x * num, y * num, z * num);
+	}
+
+	// Here we overload the / operator so we can divide by a scalar
+	CVector3 operator/(float num)
+	{
+		// Return the scale vector
+		return CVector3(x / num, y / num, z / num);
+	}
+
+	float x, y, z;
+};
+
+CVector3 GetOGLPos(int x, int y)
+{
+	GLint viewport[4];
+	GLdouble modelview[16];
+	GLdouble projection[16];
+	GLfloat winX, winY, winZ;
+	GLdouble posX, posY, posZ;
+
+	glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+	glGetDoublev(GL_PROJECTION_MATRIX, projection);
+	glGetIntegerv(GL_VIEWPORT, viewport);
+
+	winX = (float)x;
+	winY = (float)viewport[3] - (float)y;
+	glReadPixels(x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ);
+
+	gluUnProject(winX, winY, winZ, modelview, projection, viewport, &posX, &posY, &posZ);
+
+	return CVector3(posX, posY, posZ);
+}
 
 void redesenha(){
 	glutPostRedisplay();
@@ -1030,14 +1696,18 @@ int main(int argc, char **argv)
 
 	glutMotionFunc(handleMouseMove);
 
+	glutReshapeFunc(reshape);
+
 	glutIdleFunc(redesenha);
 
 	initialize();
 
-	// objs: apple (precisa dar um zoom out), cat, cow, cube, lion, shark, venus, whale, yoda (precisa dar um zoom out)
-	obj0.Load("cat.obj");
+	// objs: apple (precisa dar um zoom out), cat, cow, cube, lion, shark, venus, whale, yoda (precisa dar um zoom out), cubo1, camel, chimp, ealge, spheretri
+	obj0.Load("chimp.obj");
 	obj1.Load("dog.obj");
-	obj2.Load("lion.obj");
+	obj2.Load("shark.obj");
+
+	CVector3 cor_clique = GetOGLPos(win.width - 25.0, 0);
 
 	glutMainLoop();												// run GLUT mainloop
 
